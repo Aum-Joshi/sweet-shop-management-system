@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sweet Shop Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='minimal_style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header fade-in">
+            <h1 class="title">🍬 Sweet Shop</h1>
+            <p class="subtitle">Inventory Management System</p>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'success' if category == 'success' else 'error' }} fade-in">
+                        <span>{{ '✓' if category == 'success' else '⚠' }}</span>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Statistics -->
+        <div class="stats fade-in">
+            <div class="stat-card">
+                <div class="stat-number primary">{{ sweets|length }}</div>
+                <div class="stat-label">Total Items</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number warning">{{ low_stock_count or 0 }}</div>
+                <div class="stat-label">Low Stock</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number success">₹{{ "%.0f"|format(total_value or 0) }}</div>
+                <div class="stat-label">Total Value</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number primary">{{ categories|length }}</div>
+                <div class="stat-label">Categories</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions fade-in">
+            <button type="button" class="btn btn-primary" onclick="showModal('addModal')">
+                + Add Sweet
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="showModal('searchModal')">
+                🔍 Search
+            </button>
+        </div>
+
+        <!-- Inventory Table -->
+        <div class="card fade-in">
+            <div class="card-header">
+                <h2 class="card-title">
+                    {% if search_query %}
+                        Search Results ({{ sweets|length }})
+                    {% else %}
+                        Inventory ({{ sweets|length }})
+                    {% endif %}
+                </h2>
+            </div>
+            <div class="card-body">
+                {% if sweets %}
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Sweet</th>
+                                    <th>Category</th>
+                                    <th>Price</th>
+                                    <th>Stock</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sweet in sweets %}
+                                <tr>
+                                    <td>
+                                        <div class="sweet-name">{{ sweet.name }}</div>
+                                        <div class="sweet-id">{{ sweet.id }}</div>
+                                    </td>
+                                    <td>{{ sweet.category }}</td>
+                                    <td><span class="sweet-price">₹{{ "%.2f"|format(sweet.price) }}</span></td>
+                                    <td>
+                                        <span class="badge badge-{{ 'danger' if sweet.quantity == 0 else 'warning' if sweet.quantity <= 5 else 'success' }}">
+                                            {{ sweet.quantity }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="action-group">
+                                            <button type="button" class="btn btn-success btn-sm" 
+                                                    onclick="showPurchaseModal('{{ sweet.id }}', '{{ sweet.name }}', '{{ sweet.price }}', '{{ sweet.quantity }}')">
+                                                Buy
+                                            </button>
+                                            <button type="button" class="btn btn-secondary btn-sm"
+                                                    onclick="showRestockModal('{{ sweet.id }}', '{{ sweet.name }}')">
+                                                Stock
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm"
+                                                    onclick="showDeleteModal('{{ sweet.id }}', '{{ sweet.name }}')">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon">📦</div>
+                        <h3 class="empty-title">
+                            {% if search_query %}
+                                No sweets found
+                            {% else %}
+                                No sweets in inventory
+                            {% endif %}
+                        </h3>
+                        <p class="empty-text">
+                            {% if search_query %}
+                                Try a different search term or <a href="{{ url_for('index') }}">view all</a>
+                            {% else %}
+                                Start by adding some sweets to your inventory
+                            {% endif %}
+                        </p>
+                        {% if not search_query %}
+                            <button type="button" class="btn btn-primary" onclick="showModal('addModal')">
+                                Add First Sweet
+                            </button>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Sweet Modal -->
+    <div id="addModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Add New Sweet</h3>
+                <button type="button" class="modal-close" onclick="hideModal('addModal')">&times;</button>
+            </div>
+            <form method="POST" action="{{ url_for('add_sweet') }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-input" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <input type="text" class="form-input" name="category" placeholder="e.g., Chocolate, Candy" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Price (₹)</label>
+                        <input type="number" class="form-input" name="price" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Initial Stock</label>
+                        <input type="number" class="form-input" name="quantity" min="0" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('addModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Sweet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div id="searchModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Search Inventory</h3>
+                <button type="button" class="modal-close" onclick="hideModal('searchModal')">&times;</button>
+            </div>
+            <form method="GET" action="{{ url_for('search') }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Search Type</label>
+                        <select class="form-input" name="type">
+                            <option value="name">By Name</option>
+                            <option value="category">By Category</option>
+                            <option value="price_range">By Price Range</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Search Query</label>
+                        <input type="text" class="form-input" name="query" placeholder="Enter search term" required>
+                        <small style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+                            For price range, use: min-max (e.g., 10-50)
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('searchModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Purchase Modal -->
+    <div id="purchaseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Purchase Sweet</h3>
+                <button type="button" class="modal-close" onclick="hideModal('purchaseModal')">&times;</button>
+            </div>
+            <form method="POST" action="{{ url_for('purchase_sweet') }}">
+                <div class="modal-body">
+                    <input type="hidden" id="purchase-id" name="sweet_id">
+                    <div class="form-group">
+                        <label class="form-label">Sweet</label>
+                        <div id="purchase-name" style="font-weight: 600;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Available</label>
+                        <div id="purchase-stock" style="font-weight: 600; color: var(--success);"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Price</label>
+                        <div id="purchase-price" style="font-weight: 600;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quantity</label>
+                        <input type="number" class="form-input" id="purchase-quantity" name="quantity" min="1" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('purchaseModal')">Cancel</button>
+                    <button type="submit" class="btn btn-success">Purchase</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Restock Modal -->
+    <div id="restockModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Restock Sweet</h3>
+                <button type="button" class="modal-close" onclick="hideModal('restockModal')">&times;</button>
+            </div>
+            <form method="POST" action="{{ url_for('restock_sweet') }}">
+                <div class="modal-body">
+                    <input type="hidden" id="restock-id" name="sweet_id">
+                    <div class="form-group">
+                        <label class="form-label">Sweet</label>
+                        <div id="restock-name" style="font-weight: 600;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quantity to Add</label>
+                        <input type="number" class="form-input" name="quantity" min="1" value="10" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('restockModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Restock</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Delete Sweet</h3>
+                <button type="button" class="modal-close" onclick="hideModal('deleteModal')">&times;</button>
+            </div>
+            <form id="delete-form" method="POST">
+                <div class="modal-body">
+                    <p>Are you sure you want to delete <strong id="delete-name"></strong>?</p>
+                    <p style="color: var(--danger); font-size: 0.875rem; margin-top: 0.5rem;">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('deleteModal')">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Simple modal functions
+        function showModal(id) {
+            document.getElementById(id).classList.add('show');
+        }
+
+        function hideModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+
+        function showPurchaseModal(id, name, price, stock) {
+            document.getElementById('purchase-id').value = id;
+            document.getElementById('purchase-name').textContent = name;
+            document.getElementById('purchase-stock').textContent = stock + ' units';
+            document.getElementById('purchase-price').textContent = '₹' + price.toFixed(2);
+            document.getElementById('purchase-quantity').max = stock;
+            showModal('purchaseModal');
+        }
+
+        function showRestockModal(id, name) {
+            document.getElementById('restock-id').value = id;
+            document.getElementById('restock-name').textContent = name;
+            showModal('restockModal');
+        }
+
+        function showDeleteModal(id, name) {
+            document.getElementById('delete-name').textContent = name;
+            document.getElementById('delete-form').action = '/delete_sweet/' + id;
+            showModal('deleteModal');
+        }
+
+        // Close modal on background click
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('show');
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const openModal = document.querySelector('.modal.show');
+                if (openModal) {
+                    openModal.classList.remove('show');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

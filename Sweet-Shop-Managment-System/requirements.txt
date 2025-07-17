@@ -1,0 +1,9 @@
+
+flask
+werkzeug
+pytest
+pytest-cov
+email-validator
+flask-sqlalchemy
+gunicorn
+psycopg2-binary
